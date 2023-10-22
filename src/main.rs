@@ -3,7 +3,6 @@ use std::io::{stdout, Write};
 struct VirtualMachine {
     vars: Vec<Variable>,
     code: Vec<Instruction>,
-    ip: usize,
 }
 
 struct Variable {
@@ -45,14 +44,10 @@ enum TokenId {
     UserString,
 }
 
-struct Args {
-    int_args: Vec<i32>,
-    str_args: Vec<String>,
-}
-
 struct Instruction {
     opcode: OpCode,
-    args: Vec<Args>
+    int_args: Vec<i32>,
+    str_args: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -69,22 +64,69 @@ impl Token {
     }
 }
 
-fn emo_print(string: &str) -> Instruction {
-    Instruction {
-        opcode: OpCode::EmoPrint,
-        args: vec![Args {
-            int_args: vec![],
-            str_args: vec![String::from(string)],
-        }],
-    }
+fn execute_emoprint(string: &str) {
+    println!("{}", string);
 }
 
 fn emo_decl<T>(var_name: &str, var_value: &T) {
 
 }
 
-// fn parser(tokens: &str) -> Vec<Instruction> {
-// }
+fn interpret(vm: &VirtualMachine) {
+    let mut ip = 0;
+    while ip < vm.code.len() {
+        let ins = &vm.code[ip];
+        match ins.opcode {
+            OpCode::EmoPrint => {
+                execute_emoprint(ins.str_args.join("").as_str());
+                ip += 1
+            },
+            _ => {
+                unimplemented!();
+            }
+        }
+    };
+}
+
+fn parser(tokens: &Vec<Token>) -> Vec<Instruction> {
+    let mut instructions : Vec<Instruction> = vec![];
+    let mut in_declaration = false;
+    for i in 0..tokens.len() {
+        let tok = &tokens[i];
+        match tok.token_id {
+            TokenId::EmojiDecl => {
+                in_declaration = true;
+            },
+            TokenId::Identifier => {
+                if in_declaration {
+                    instructions.push(Instruction {
+                        opcode: OpCode::EmoDecl,
+                        int_args: vec![],
+                        str_args: vec![tok.token_str.clone().unwrap()]
+                    });
+                    in_declaration = false;
+                }
+            },
+            TokenId::EmojiShout => {
+                let user_string = match tokens[i+1].token_id {
+                    TokenId::UserString => tokens[i+1].token_str.clone().unwrap(),
+                    _ => {
+                        println!("{}:{}: ERROR: Expected a string after a '🤬'", tokens[i+1].line, tokens[i+1].col);
+                        String::from("")
+                    },
+                };
+                instructions.push(Instruction {
+                    opcode: OpCode::EmoPrint,
+                    int_args: vec![],
+                    str_args: vec![user_string],
+                });
+            },
+            _ => {}
+        }
+    }
+
+    instructions
+}
 
 fn lexer(source_code: &str) -> Vec<Token> {
     let mut tokens : Vec<Token> = vec![];
@@ -132,7 +174,7 @@ fn lexer(source_code: &str) -> Vec<Token> {
                 "🤯" => tokens.push(Token::new(TokenId::EmojiCalc, line_nr, col_nr, None)),
                 "🤝" => tokens.push(Token::new(TokenId::EmojiConcat, line_nr, col_nr, None)),
                 "😶" => tokens.push(Token::new(TokenId::EmojiDecl, line_nr, col_nr, None)),
-                _ => tokens.push(Token::new(TokenId::Identifier, line_nr, col_nr, None)),
+                _ => tokens.push(Token::new(TokenId::Identifier, line_nr, col_nr, Some(String::from(word)))),
             }
             col_nr += word.len();
         }
@@ -147,5 +189,10 @@ fn main() {
     std::io::stdout().flush().unwrap();
     let bytes = std::io::stdin().read_line(&mut line).unwrap();
     let tokens = lexer(&line);
-    println!("{:?}", tokens);
+    let vm = VirtualMachine {
+        code: parser(&tokens),
+        vars: vec![],
+    };
+    interpret(&vm);
+    // println!("{:?}", tokens);
 }
